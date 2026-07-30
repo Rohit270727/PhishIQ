@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { width: 320px; font-family: "Segoe UI", system-ui, sans-serif; background: #0a0e17; color: #e8ecf4; margin: 0; padding: 16px; }
+  h1 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .url-box { background: #131926; border: 1px solid #2a3448; border-radius: 8px; padding: 8px 10px; font-size: 11px; word-break: break-all; color: #8a94a8; margin-bottom: 12px; }
+  button { width: 100%; padding: 10px; background: #00d9a3; color: #05100c; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  button:hover { background: #00b88a; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .result { margin-top: 14px; display: none; }
+  .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .score { font-size: 30px; font-weight: 800; }
+  .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-safe { background: rgba(0,217,163,0.15); color: #00d9a3; }
+  .badge-suspicious { background: rgba(255,176,32,0.15); color: #ffb020; }
+  .badge-dangerous { background: rgba(255,71,87,0.15); color: #ff4757; }
+  .flags { list-style: none; padding: 0; margin: 0; font-size: 11px; }
+  .flags li { padding: 6px 8px; background: #131926; border-radius: 6px; margin-bottom: 5px; }
+  .error { color: #ff4757; font-size: 12px; margin-top: 10px; }
+  .hint { font-size: 11px; color: #8a94a8; margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>PhishIQ</h1>
+  <div class="url-box" id="urlBox">Loading current tab...</div>
+  <button id="scanBtn">Scan This Page</button>
+  <div class="result" id="result">
+    <div class="score-row">
+      <div class="score" id="scoreVal">0</div>
+      <span class="badge" id="verdictBadge"></span>
+    </div>
+    <ul class="flags" id="flagsList"></ul>
+  </div>
+  <div class="error" id="errorMsg"></div>
+  <p class="hint">Requires PhishIQ running locally on port 5050</p>
+  <script src="popup.js"></script>
+</body>
+</html>

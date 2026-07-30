@@ -1,0 +1,38 @@
+﻿{% extends "base.html" %}
+{% block title %}History - PhishIQ{% endblock %}
+{% block content %}
+<h1 class="page-title">Scan History</h1>
+
+<form method="GET" class="filter-bar">
+    <select name="type" onchange="this.form.submit()">
+        <option value="all" {{ "selected" if filter_type == "all" }}>All Types</option>
+        <option value="url" {{ "selected" if filter_type == "url" }}>URL</option>
+        <option value="message" {{ "selected" if filter_type == "message" }}>Message</option>
+    </select>
+    <select name="verdict" onchange="this.form.submit()">
+        <option value="all" {{ "selected" if filter_verdict == "all" }}>All Verdicts</option>
+        <option value="Safe" {{ "selected" if filter_verdict == "Safe" }}>Safe</option>
+        <option value="Suspicious" {{ "selected" if filter_verdict == "Suspicious" }}>Suspicious</option>
+        <option value="Dangerous" {{ "selected" if filter_verdict == "Dangerous" }}>Dangerous</option>
+    </select>
+</form>
+
+{% if scans %}
+<table class="data-table">
+    <thead><tr><th>Type</th><th>Input</th><th>Score</th><th>Verdict</th><th>Date</th></tr></thead>
+    <tbody>
+        {% for scan in scans %}
+        <tr onclick="window.location='{{ url_for('result', scan_id=scan.id) }}'">
+            <td>{{ scan.scan_type|capitalize }}</td>
+            <td class="truncate">{{ scan.input_data }}</td>
+            <td>{{ scan.risk_score }}/100</td>
+            <td><span class="badge badge-{{ scan.verdict|lower }}">{{ scan.verdict }}</span></td>
+            <td>{{ scan.created_at.strftime('%d %b, %I:%M %p') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-state">No scans match this filter.</p>
+{% endif %}
+{% endblock %}

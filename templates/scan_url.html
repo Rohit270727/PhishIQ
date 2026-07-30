@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Scan URL - PhishIQ{% endblock %}
+{% block content %}
+<div class="scan-wrapper">
+    <h1 class="page-title">URL Scanner</h1>
+    <p class="page-subtitle">Paste a link to check it for phishing indicators</p>
+    <form method="POST" class="scan-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Website URL</label>
+            <input type="text" name="url" placeholder="e.g. https://example.com/login" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Scan URL</button>
+    </form>
+</div>
+{% endblock %}

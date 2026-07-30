@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}API Keys - PhishIQ{% endblock %}
+{% block content %}
+<h1 class="page-title">API Keys</h1>
+<p class="page-subtitle">Generate keys to access the PhishIQ public REST API</p>
+
+<form method="POST" action="{{ url_for('generate_api_key') }}" class="filter-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="label" placeholder="Key label (e.g. My App)" maxlength="100" style="flex:1; padding:10px; border-radius:6px; border:1px solid #2a3448; background:#131926; color:#e8ecf4;">
+    <button type="submit" class="btn btn-primary">Generate New Key</button>
+</form>
+
+{% if keys %}
+<table class="data-table">
+    <thead><tr><th>Label</th><th>Key</th><th>Status</th><th>Created</th><th>Last Used</th><th></th></tr></thead>
+    <tbody>
+        {% for k in keys %}
+        <tr>
+            <td>{{ k.label }}</td>
+            <td class="truncate" style="font-family:monospace; font-size:12px;">
+                {{ k.key[:8] }}{{ '*' * 24 }}{{ k.key[-4:] }}
+            </td>
+            <td>
+                {% if k.is_active %}
+                <span class="badge badge-safe">Active</span>
+                {% else %}
+                <span class="badge badge-dangerous">Revoked</span>
+                {% endif %}
+            </td>
+            <td>{{ k.created_at.strftime('%d %b %Y') }}</td>
+            <td>{{ k.last_used_at.strftime('%d %b %Y, %I:%M %p') if k.last_used_at else 'Never' }}</td>
+            <td>
+                {% if k.is_active %}
+                <form method="POST" action="{{ url_for('revoke_api_key', key_id=k.id) }}" onsubmit="return confirm('Revoke this key? This cannot be undone.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">Revoke</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-state">No API keys yet. Generate one above.</p>
+{% endif %}
+{% endblock %}

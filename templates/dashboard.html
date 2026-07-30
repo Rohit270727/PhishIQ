@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - PhishIQ{% endblock %}
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+<p class="page-subtitle">Overview of your phishing detection activity</p>
+<form method="POST" action="{{ url_for('send_digest') }}" style="margin-bottom:20px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-secondary">Email Me My Weekly Digest</button>
+</form>
+
+<div class="stats-grid">
+    <div class="stat-card"><div class="stat-value">{{ total }}</div><div class="stat-label">Total Scans</div></div>
+    <div class="stat-card safe"><div class="stat-value">{{ safe_count }}</div><div class="stat-label">Safe</div></div>
+    <div class="stat-card suspicious"><div class="stat-value">{{ suspicious_count }}</div><div class="stat-label">Suspicious</div></div>
+    <div class="stat-card dangerous"><div class="stat-value">{{ dangerous_count }}</div><div class="stat-label">Dangerous</div></div>
+</div>
+
+<div class="action-cards">
+    <a href="{{ url_for('scan_url') }}" class="action-card">
+        <h3>Scan a URL</h3>
+        <p>Check if a website is a phishing attempt</p>
+    </a>
+    <a href="{{ url_for('scan_message') }}" class="action-card">
+        <h3>Scan a Message</h3>
+        <p>Check an SMS or email for scam indicators</p>
+    </a>
+    <a href="{{ url_for('scan_qr') }}" class="action-card">
+        <h3>Scan a QR Code</h3>
+        <p>Check where a QR code actually leads</p>
+    </a>
+    <a href="{{ url_for('scan_bulk') }}" class="action-card">
+        <h3>Bulk Scan</h3>
+        <p>Scan up to 25 URLs at once</p>
+    </a>
+</div>
+
+<div class="recent-section">
+    <div class="section-header">
+        <h2>Recent Scans</h2>
+        <a href="{{ url_for('history') }}">View all &rarr;</a>
+    </div>
+    {% if recent %}
+    <table class="data-table">
+        <thead><tr><th>Type</th><th>Input</th><th>Score</th><th>Verdict</th><th>Date</th></tr></thead>
+        <tbody>
+            {% for scan in recent %}
+            <tr onclick="window.location='{{ url_for('result', scan_id=scan.id) }}'">
+                <td>{{ scan.scan_type|capitalize }}</td>
+                <td class="truncate">{{ scan.input_data }}</td>
+                <td>{{ scan.risk_score }}/100</td>
+                <td><span class="badge badge-{{ scan.verdict|lower }}">{{ scan.verdict }}</span></td>
+                <td>{{ scan.created_at.strftime('%d %b, %I:%M %p') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No scans yet. Run your first scan above.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+
+

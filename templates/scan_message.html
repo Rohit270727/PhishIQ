@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Scan Message - PhishIQ{% endblock %}
+{% block content %}
+<div class="scan-wrapper">
+    <h1 class="page-title">Message Scanner</h1>
+    <p class="page-subtitle">Paste an SMS or email body to check for scam indicators</p>
+    <form method="POST" class="scan-form" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Message Content</label>
+            <textarea name="message" rows="8" placeholder="Paste the full message text here..." autofocus></textarea>
+        </div>
+        <div class="form-group">
+            <label>Or Upload a File (.txt, .eml, .pdf)</label>
+            <input type="file" name="message_file" accept=".txt,.eml,.pdf">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Scan Message</button>
+    </form>
+</div>
+{% endblock %}
+

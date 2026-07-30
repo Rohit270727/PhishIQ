@@ -1,0 +1,67 @@
+﻿{% extends "base.html" %}
+{% block title %}Admin Dashboard - PhishIQ{% endblock %}
+{% block content %}
+<h1 class="page-title">Admin Dashboard</h1>
+<p class="page-subtitle">Platform-wide scan analytics</p>
+
+<div class="stats-grid">
+    <div class="stat-card"><div class="stat-value">{{ total_users }}</div><div class="stat-label">Total Users</div></div>
+    <div class="stat-card"><div class="stat-value">{{ total_scans }}</div><div class="stat-label">Total Scans</div></div>
+    <div class="stat-card safe"><div class="stat-value">{{ safe_count }}</div><div class="stat-label">Safe</div></div>
+    <div class="stat-card suspicious"><div class="stat-value">{{ suspicious_count }}</div><div class="stat-label">Suspicious</div></div>
+    <div class="stat-card dangerous"><div class="stat-value">{{ dangerous_count }}</div><div class="stat-label">Dangerous</div></div>
+</div>
+
+<div class="recent-section">
+    <div class="section-header"><h2>Model Feedback</h2></div>
+    {% if feedback_total > 0 %}
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value">{{ feedback_total }}</div><div class="stat-label">Total Feedback</div></div>
+        <div class="stat-card safe"><div class="stat-value">{{ feedback_correct }}</div><div class="stat-label">Marked Correct</div></div>
+        <div class="stat-card dangerous"><div class="stat-value">{{ feedback_fp }}</div><div class="stat-label">False Positives</div></div>
+        <div class="stat-card suspicious"><div class="stat-value">{{ feedback_fn }}</div><div class="stat-label">Missed Threats</div></div>
+        <div class="stat-card"><div class="stat-value">{{ feedback_accuracy }}%</div><div class="stat-label">Reported Accuracy</div></div>
+    </div>
+    {% else %}
+    <p class="empty-state">No feedback submitted yet.</p>
+    {% endif %}
+</div>
+<div class="recent-section">
+    <div class="section-header"><h2>Top Flagged URLs</h2></div>
+    {% if top_domains %}
+    <table class="data-table">
+        <thead><tr><th>URL</th><th>Times Flagged</th></tr></thead>
+        <tbody>
+            {% for input_data, cnt in top_domains %}
+            <tr><td class="truncate">{{ input_data }}</td><td>{{ cnt }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No suspicious/dangerous URLs flagged yet.</p>
+    {% endif %}
+</div>
+
+<div class="recent-section">
+    <div class="section-header"><h2>Recent Scans (All Users)</h2></div>
+    {% if recent_scans %}
+    <table class="data-table">
+        <thead><tr><th>User</th><th>Type</th><th>Input</th><th>Score</th><th>Verdict</th><th>Date</th></tr></thead>
+        <tbody>
+            {% for scan in recent_scans %}
+            <tr>
+                <td>{{ scan.user.username }}</td>
+                <td>{{ scan.scan_type|capitalize }}</td>
+                <td class="truncate">{{ scan.input_data }}</td>
+                <td>{{ scan.risk_score }}/100</td>
+                <td><span class="badge badge-{{ scan.verdict|lower }}">{{ scan.verdict }}</span></td>
+                <td>{{ scan.created_at.strftime('%d %b, %I:%M %p') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No scans yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

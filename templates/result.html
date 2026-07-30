@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Scan Result - PhishIQ{% endblock %}
+{% block content %}
+<div class="result-wrapper">
+    <div class="result-header verdict-{{ scan.verdict|lower }}">
+        <div class="gauge-ring">
+            <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-bg"></circle>
+                <circle cx="60" cy="60" r="52" class="ring-fg ring-{{ scan.verdict|lower }}"
+                        style="stroke-dasharray: {{ (scan.risk_score / 100 * 326.7)|round(1) }} 326.7;">
+                </circle>
+            </svg>
+            <div class="ring-text">
+                <div class="gauge-value">{{ scan.risk_score }}</div>
+                <div class="gauge-max">/100</div>
+            </div>
+        </div>
+        <div class="verdict-info">
+            <span class="badge badge-lg badge-{{ scan.verdict|lower }}">{{ scan.verdict }}</span>
+            <p class="scanned-input">{{ scan.input_data }}</p>
+            <p class="scan-meta">{{ scan.scan_type|capitalize }} scan &bull; {{ scan.created_at.strftime('%d %b %Y, %I:%M %p') }}</p>
+        </div>
+    </div>
+
+    <div class="flags-section">
+        <h2>Detection Breakdown</h2>
+        <ul class="flags-list">
+            {% for reason, points in flags %}
+            <li class="{{ 'flag-clean' if points == 0 else 'flag-hit' }}">
+                <span class="flag-points">{{ '+' ~ points if points > 0 else 'OK' }}</span>
+                <span class="flag-reason">{{ reason }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="feedback-section">
+        <h2>Was this result accurate?</h2>
+        <div class="feedback-buttons" data-scan-id="{{ scan.id }}">
+            <button type="button" class="feedback-btn feedback-correct {{ 'active' if feedback_type == 'correct' else '' }}" data-type="correct">
+                &#128077; Correct
+            </button>
+            <button type="button" class="feedback-btn feedback-fp {{ 'active' if feedback_type == 'false_positive' else '' }}" data-type="false_positive">
+                &#128078; False Positive
+            </button>
+            <button type="button" class="feedback-btn feedback-fn {{ 'active' if feedback_type == 'false_negative' else '' }}" data-type="false_negative">
+                &#9888; Missed Threat
+            </button>
+        </div>
+        <p class="feedback-confirm" style="display:none;">Thanks for the feedback!</p>
+    </div>
+
+    {% if scan.scan_type == 'url' %}
+    <div class="deep-scan-section">
+        <form method="POST" action="{{ url_for('deep_scan', scan_id=scan.id) }}" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Running Deep Scan (this may take a few seconds)...';">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-block">Run Deep Scan (Visual Brand Check)</button>
+        </form>
+    </div>
+    {% endif %}
+    <div class="result-actions">
+        <a href="{{ url_for('download_report', scan_id=scan.id) }}" class="btn btn-secondary">Download PDF Report</a>
+        <a href="{{ url_for('scan_url') if scan.scan_type == 'url' else (url_for('scan_qr') if scan.scan_type == 'qr' else url_for('scan_message')) }}" class="btn btn-secondary">Scan Another</a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const container = document.querySelector(".feedback-buttons");
+    if (!container) return;
+
+    const scanId = container.dataset.scanId;
+    const confirmMsg = document.querySelector(".feedback-confirm");
+
+    container.querySelectorAll(".feedback-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            const feedbackType = btn.dataset.type;
+
+            fetch(`/scan/${scanId}/feedback`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token() }}"
+                },
+                body: JSON.stringify({ feedback_type: feedbackType })
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    container.querySelectorAll(".feedback-btn").forEach(function (b) {
+                        b.classList.remove("active");
+                    });
+                    btn.classList.add("active");
+                    if (confirmMsg) {
+                        confirmMsg.style.display = "block";
+                        setTimeout(function () { confirmMsg.style.display = "none"; }, 2500);
+                    }
+                } else {
+                    alert(data.error || "Could not save feedback.");
+                }
+            })
+            .catch(function () {
+                alert("Network error saving feedback.");
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

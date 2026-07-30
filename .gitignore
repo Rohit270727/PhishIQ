@@ -1,0 +1,27 @@
+﻿# Environment & secrets
+.env
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Database (contains real user data - never commit)
+phishiq.db
+
+# User-uploaded content
+static/qr_uploads/*
+static/message_uploads/*
+
+# Reference screenshots (regenerable, and somewhat large binary files)
+reference_screenshots/
+
+# OS/editor junk
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Pytest cache
+.pytest_cache/

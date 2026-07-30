@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Bulk Scan Results - PhishIQ{% endblock %}
+{% block content %}
+<div class="section-header">
+    <h1 class="page-title">Bulk Scan Results</h1>
+</div>
+<p class="page-subtitle">{{ results|length }} URL(s) scanned</p>
+
+<table class="data-table">
+    <thead><tr><th>URL</th><th>Score</th><th>Verdict</th></tr></thead>
+    <tbody>
+        {% for scan in results %}
+        <tr onclick="window.location='{{ url_for('result', scan_id=scan.id) }}'">
+            <td class="truncate">{{ scan.input_data }}</td>
+            <td>{{ scan.risk_score }}/100</td>
+            <td><span class="badge badge-{{ scan.verdict|lower }}">{{ scan.verdict }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="result-actions">
+    <form method="POST" action="{{ url_for('bulk_export') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="scan_ids" value="{{ scan_ids }}">
+        <button type="submit" class="btn btn-primary">Export as CSV</button>
+    </form>
+    <a href="{{ url_for('scan_bulk') }}" class="btn btn-secondary">Scan Another Batch</a>
+</div>
+{% endblock %}

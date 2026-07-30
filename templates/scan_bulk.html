@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Bulk Scan - PhishIQ{% endblock %}
+{% block content %}
+<div class="scan-wrapper">
+    <h1 class="page-title">Bulk URL Scan</h1>
+    <p class="page-subtitle">Paste up to 25 URLs (one per line) or upload a CSV with URLs in the first column</p>
+    <form method="POST" enctype="multipart/form-data" class="scan-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Paste URLs (one per line)</label>
+            <textarea name="url_list" rows="8" placeholder="https://example.com/login&#10;http://another-site.tk/verify"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Or upload a CSV file</label>
+            <input type="file" name="csv_file" accept=".csv">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Scan All</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Scan QR Code - PhishIQ{% endblock %}
+{% block content %}
+<div class="scan-wrapper">
+    <h1 class="page-title">QR Code Scanner</h1>
+    <p class="page-subtitle">Upload a QR code image to check the embedded link for phishing indicators</p>
+    <form method="POST" enctype="multipart/form-data" class="scan-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>QR Code Image</label>
+            <input type="file" name="qr_image" accept=".png,.jpg,.jpeg,.webp,.bmp" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Scan QR Code</button>
+    </form>
+</div>
+{% endblock %}
