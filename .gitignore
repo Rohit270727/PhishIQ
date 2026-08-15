@@ -25,3 +25,13 @@ Thumbs.db
 
 # Pytest cache
 .pytest_cache/
+
+# Large data files (not needed in repo)
+data/*.csv
+ml_models/*.pkl
+
+# Backup and one-off debug scripts
+*.bak_*
+py_files_list.txt
+keyword_audit.txt
+fix_*.py
