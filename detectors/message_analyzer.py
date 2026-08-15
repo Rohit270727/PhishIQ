@@ -2,6 +2,8 @@
 from detectors.ml_predictor import ml_message_probability
 from detectors.email_auth import check_email_auth
 from detectors.header_consistency import check_header_consistency
+from detectors.file_extractor import extract_html_body
+from detectors.link_mismatch_detector import check_link_text_mismatch
 
 URGENCY_WORDS = ["urgent", "immediately", "act now", "expire", "expiring", "suspended",
                  "verify now", "limited time", "act fast", "last chance", "final notice"]
@@ -97,6 +99,15 @@ def analyze_message(text, sender_domain=None, eml_filepath=None):
         for hc_message, hc_points in check_header_consistency(eml_filepath):
             flags.append((hc_message, hc_points))
             final_score = min(final_score + hc_points, 100)
+            if final_score >= 61:
+                verdict = "Dangerous"
+            elif final_score >= 31:
+                verdict = "Suspicious"
+
+        html_body = extract_html_body(eml_filepath, "eml")
+        for lm_message, lm_points in check_link_text_mismatch(html_body):
+            flags.append((lm_message, lm_points))
+            final_score = min(final_score + lm_points, 100)
             if final_score >= 61:
                 verdict = "Dangerous"
             elif final_score >= 31:
