@@ -1,23 +1,12 @@
 ﻿"""
 detectors/page_source_analyzer.py
-Inspects a page's rendered DOM for two distinct exfiltration/payload
-patterns not covered by credential_form_analyzer.py:
-  1. Hidden iframes (display:none, zero-size, off-screen) - often used
-     to silently load malicious content or run clickjacking overlays.
-  2. External resource references (script src, fetch/XHR targets in
-     inline scripts) pointing to a different domain than the page -
-     possible data exfiltration or injected payload.
-Deliberately does NOT check <form action> - that's already handled by
-credential_form_analyzer.py; duplicating it here would double-count.
+Inspects an already-loaded page for hidden iframes and external
+resource references. Takes a Playwright `page` object rather than
+launching its own browser per call.
 """
 import re
 from urllib.parse import urljoin, urlparse
-from playwright.sync_api import sync_playwright
 
-_PAGE_LOAD_TIMEOUT_MS = 10000
-
-# Matches absolute URLs inside fetch(...)/XMLHttpRequest.open(...) calls
-# in inline <script> content - deliberately simple, not a JS parser.
 _FETCH_XHR_PATTERN = re.compile(
     r"""(?:fetch\s*\(\s*|\.open\s*\(\s*['"]\w+['"]\s*,\s*)['"](https?://[^'"]+)['"]""",
     re.IGNORECASE
@@ -25,7 +14,6 @@ _FETCH_XHR_PATTERN = re.compile(
 
 
 def _is_hidden(el) -> bool:
-    """Heuristic visibility check via computed style + explicit attrs."""
     try:
         style = el.evaluate(
             "el => { const s = getComputedStyle(el); return s.display + '|' + s.visibility + '|' + s.width + '|' + s.height; }"
@@ -46,65 +34,48 @@ def _is_hidden(el) -> bool:
     return False
 
 
-def _inspect_page(url: str):
-    """Returns (hidden_iframe_domains set, external_script_domains set)
-    or None on failure - caller treats None as inconclusive, skip."""
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page = browser.new_page()
-            page.goto(url, timeout=_PAGE_LOAD_TIMEOUT_MS)
-            page.wait_for_timeout(1000)
-
-            hidden_iframe_domains = set()
-            for iframe in page.query_selector_all("iframe"):
-                src = iframe.get_attribute("src")
-                if not src:
-                    continue
-                if _is_hidden(iframe):
-                    try:
-                        iframe_domain = urlparse(urljoin(url, src)).netloc.lower().split(":")[0]
-                        if iframe_domain:
-                            hidden_iframe_domains.add(iframe_domain)
-                    except Exception:
-                        pass
-
-            external_script_domains = set()
-            for script in page.query_selector_all("script"):
-                src = script.get_attribute("src")
-                if src:
-                    try:
-                        script_domain = urlparse(urljoin(url, src)).netloc.lower().split(":")[0]
-                        if script_domain:
-                            external_script_domains.add(script_domain)
-                    except Exception:
-                        pass
-                    continue
-                # Inline script - check its text content for fetch/XHR targets
-                content = script.inner_text() or ""
-                for match in _FETCH_XHR_PATTERN.finditer(content):
-                    try:
-                        target_domain = urlparse(match.group(1)).netloc.lower().split(":")[0]
-                        if target_domain:
-                            external_script_domains.add(target_domain)
-                    except Exception:
-                        pass
-
-            page.close()
-            browser.close()
-
-        return hidden_iframe_domains, external_script_domains
-    except Exception:
-        return None
-
-
-def check_page_source(url: str, domain: str) -> list:
-    """Returns (message, points) tuples for url_analyzer's scoring loop."""
-    result = _inspect_page(url)
-    if result is None:
+def check_page_source(page, url: str, domain: str) -> list:
+    """Returns (message, points) tuples. `page` must already be loaded
+    by the caller (see page_session.py)."""
+    if page is None:
         return []
 
-    hidden_iframe_domains, external_script_domains = result
+    try:
+        hidden_iframe_domains = set()
+        for iframe in page.query_selector_all("iframe"):
+            src = iframe.get_attribute("src")
+            if not src:
+                continue
+            if _is_hidden(iframe):
+                try:
+                    iframe_domain = urlparse(urljoin(url, src)).netloc.lower().split(":")[0]
+                    if iframe_domain:
+                        hidden_iframe_domains.add(iframe_domain)
+                except Exception:
+                    pass
+
+        external_script_domains = set()
+        for script in page.query_selector_all("script"):
+            src = script.get_attribute("src")
+            if src:
+                try:
+                    script_domain = urlparse(urljoin(url, src)).netloc.lower().split(":")[0]
+                    if script_domain:
+                        external_script_domains.add(script_domain)
+                except Exception:
+                    pass
+                continue
+            content = script.inner_text() or ""
+            for match in _FETCH_XHR_PATTERN.finditer(content):
+                try:
+                    target_domain = urlparse(match.group(1)).netloc.lower().split(":")[0]
+                    if target_domain:
+                        external_script_domains.add(target_domain)
+                except Exception:
+                    pass
+    except Exception:
+        return []
+
     out = []
     own_registered = domain.split(":")[0]
 

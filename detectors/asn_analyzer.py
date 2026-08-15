@@ -48,7 +48,7 @@ def analyze_asn(domain: str) -> dict:
 
     try:
         obj = IPWhois(ip)
-        rdap = obj.lookup_rdap(depth=1)
+        rdap = obj.lookup_rdap(depth=1, rate_limit_timeout=_TIMEOUT, retry_count=0)
     except IPDefinedError:
         result["checked"] = False
         result["risk_notes"].append("IP is in a private/reserved range — ASN lookup not applicable")

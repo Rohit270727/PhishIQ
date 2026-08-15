@@ -1,9 +1,10 @@
 ﻿"""
 detectors/favicon_analyzer.py
 Fetches a site's favicon and compares its hash against known brand
-favicons. A domain that is not the real brand but serves the real
-brand's exact favicon bytes is a strong phishing signal (attackers
-copy visual assets but rarely bother regenerating icon files).
+favicons. Direct fetch via requests first (cheap, no browser); falls
+back to reading <link rel="icon"> from an already-loaded Playwright
+`page` (shared session from page_session.py) rather than launching
+its own browser.
 """
 import os
 import json
@@ -11,7 +12,6 @@ import hashlib
 import requests
 import tldextract
 from urllib.parse import urljoin
-from playwright.sync_api import sync_playwright
 
 HASHES_PATH = os.path.join(os.path.dirname(__file__), "brand_favicon_hashes.json")
 
@@ -22,7 +22,7 @@ except FileNotFoundError:
     BRAND_FAVICON_HASHES = {}
 
 _REQUEST_TIMEOUT = 6
-_MAX_FAVICON_BYTES = 2 * 1024 * 1024  # 2MB sanity cap
+_MAX_FAVICON_BYTES = 2 * 1024 * 1024
 
 
 def _hash_bytes(data: bytes) -> str:
@@ -46,17 +46,15 @@ def _fetch_direct(base_url: str):
         return None
 
 
-def _fetch_via_browser(base_url: str):
+def _fetch_via_page(page):
+    """Reads <link rel='icon'> from an already-loaded page instead of
+    launching a separate browser session."""
+    if page is None:
+        return None
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page = browser.new_page()
-            page.goto(base_url, timeout=10000)
-            icon_href = page.eval_on_selector(
-                "link[rel~='icon']", "el => el.href"
-            ) if page.query_selector("link[rel~='icon']") else None
-            page.close()
-            browser.close()
+        icon_href = page.eval_on_selector(
+            "link[rel~='icon']", "el => el.href"
+        ) if page.query_selector("link[rel~='icon']") else None
 
         if not icon_href:
             return None
@@ -73,21 +71,20 @@ def _fetch_via_browser(base_url: str):
 
 
 def _registered_domain_matches_brand(domain: str, brand: str) -> bool:
-    """True only if the domain's actual registrable label is the brand
-    itself (paypal.com, paypal.co.uk) — NOT merely containing the brand
-    name as a substring (paypal-verify-account.tk must NOT match)."""
     ext = tldextract.extract(domain)
     return ext.domain.lower() == brand.lower()
 
 
-def check_favicon(url: str, domain: str) -> list:
-    """Returns (message, points) tuples for url_analyzer's scoring loop."""
+def check_favicon(page, url: str, domain: str) -> list:
+    """Returns (message, points) tuples. `page` is the shared session
+    page (may be None if the session failed to open - direct fetch is
+    tried regardless since it doesn't need a browser)."""
     if not BRAND_FAVICON_HASHES:
         return []
 
     favicon_bytes = _fetch_direct(url)
     if favicon_bytes is None:
-        favicon_bytes = _fetch_via_browser(url)
+        favicon_bytes = _fetch_via_page(page)
     if favicon_bytes is None:
         return []
 

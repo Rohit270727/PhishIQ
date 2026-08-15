@@ -16,6 +16,8 @@ from detectors.favicon_analyzer import check_favicon
 from detectors.credential_form_analyzer import check_credential_forms
 from detectors.page_source_analyzer import check_page_source
 from detectors.fake_captcha_analyzer import check_fake_captcha
+from detectors.redirect_chain_analyzer import check_redirect_chain
+from detectors.page_session import open_scan_session, close_scan_session
 
 SUSPICIOUS_TLDS = ["tk", "ml", "ga", "cf", "gq", "xyz", "top", "work", "click", "link", "club", "loan", "win", "download"]
 SHORTENERS = ["bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly"]
@@ -173,21 +175,29 @@ def analyze_url(raw_url):
             flags.append((qp_message, qp_points))
             score += qp_points
 
-        for fv_message, fv_points in check_favicon(url, host_domain):
-            flags.append((fv_message, fv_points))
-            score += fv_points
+        _pw, _browser, _page = open_scan_session(url)
+        try:
+            for fv_message, fv_points in check_favicon(_page, url, host_domain):
+                flags.append((fv_message, fv_points))
+                score += fv_points
 
-        for cf_message, cf_points in check_credential_forms(url, host_domain):
-            flags.append((cf_message, cf_points))
-            score += cf_points
+            for cf_message, cf_points in check_credential_forms(_page, url, host_domain):
+                flags.append((cf_message, cf_points))
+                score += cf_points
 
-        for ps_message, ps_points in check_page_source(url, host_domain):
-            flags.append((ps_message, ps_points))
-            score += ps_points
+            for ps_message, ps_points in check_page_source(_page, url, host_domain):
+                flags.append((ps_message, ps_points))
+                score += ps_points
 
-        for fc_message, fc_points in check_fake_captcha(url, host_domain):
-            flags.append((fc_message, fc_points))
-            score += fc_points
+            for fc_message, fc_points in check_fake_captcha(_page, url, host_domain):
+                flags.append((fc_message, fc_points))
+                score += fc_points
+        finally:
+            close_scan_session(_pw, _browser)
+
+        for rc_message, rc_points in check_redirect_chain(url, host_domain):
+            flags.append((rc_message, rc_points))
+            score += rc_points
 
     domain_age = get_domain_age_days(domain)
     if domain_age is not None:
