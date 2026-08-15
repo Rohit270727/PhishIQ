@@ -1,4 +1,4 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "PhishIQ - Phishing Detector",
   "version": "1.0.0",
@@ -18,30 +18,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "http://*/*",
-    "http://127.0.0.1:5050/*",
-    "https://*/*"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ]
+  "permissions": ["activeTab"],
+  "host_permissions": ["http://127.0.0.1:5050/*"]
 }

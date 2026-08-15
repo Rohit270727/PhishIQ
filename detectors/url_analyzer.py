@@ -1,4 +1,4 @@
-﻿import re
+import re
 import os
 import tldextract
 from urllib.parse import urlparse
@@ -11,6 +11,9 @@ from detectors.feedback_adjuster import get_domain_tally, get_adjustment_for_dom
 from detectors.threat_intel import check_threat_intel
 from detectors.dns_analyzer import check_dns
 from detectors.asn_analyzer import check_asn
+from detectors.dangling_dns_analyzer import check_dangling_dns
+from detectors.historical_dns_tracker import check_historical_dns
+from detectors.ioc_correlation import check_ioc_correlation
 from detectors.query_param_analyzer import analyze_query_params
 from detectors.favicon_analyzer import check_favicon
 from detectors.credential_form_analyzer import check_credential_forms
@@ -18,6 +21,8 @@ from detectors.page_source_analyzer import check_page_source
 from detectors.fake_captcha_analyzer import check_fake_captcha
 from detectors.redirect_chain_analyzer import check_redirect_chain
 from detectors.page_session import open_scan_session, close_scan_session
+from concurrent.futures import ThreadPoolExecutor
+from flask import current_app
 
 SUSPICIOUS_TLDS = ["tk", "ml", "ga", "cf", "gq", "xyz", "top", "work", "click", "link", "club", "loan", "win", "download"]
 SHORTENERS = ["bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly"]
@@ -57,6 +62,35 @@ def _normalize_for_analysis(text, max_iterations=3):
             break
         prev = decoded
     return prev
+
+
+def _run_playwright_checks(url, host_domain):
+    """Runs the favicon / credential-form / page-source / fake-captcha
+    checks, which share one Playwright page and must stay sequential
+    relative to each other. Returns combined (message, points) tuples
+    in order. Safe to run in a background thread alongside the other
+    independent network checks in analyze_url().
+    """
+    results = []
+    _pw, _browser, _page = open_scan_session(url)
+    try:
+        results.extend(check_favicon(_page, url, host_domain))
+        results.extend(check_credential_forms(_page, url, host_domain))
+        results.extend(check_page_source(_page, url, host_domain))
+        results.extend(check_fake_captcha(_page, url, host_domain))
+    finally:
+        close_scan_session(_pw, _browser)
+    return results
+
+
+def _run_in_context(app, fn, *args, **kwargs):
+    """Runs fn(*args, **kwargs) inside its own Flask app context.
+    Needed because ThreadPoolExecutor worker threads don't inherit
+    the app context that _run_async_scan() pushed in its own thread
+    (app context is thread-local, not shared across threads).
+    """
+    with app.app_context():
+        return fn(*args, **kwargs)
 
 
 def analyze_url(raw_url):
@@ -151,55 +185,71 @@ def analyze_url(raw_url):
         flags.append((hg_message, hg_points))
         score += hg_points
 
-    for ti_message, ti_points in check_threat_intel(url_original):
-        flags.append((ti_message, ti_points))
-        score += ti_points
+    executor = ThreadPoolExecutor(max_workers=10)
+    _app = current_app._get_current_object()
+    futures = {}
+    futures["threat_intel"] = executor.submit(_run_in_context, _app, check_threat_intel, url_original)
+    futures["domain_age"] = executor.submit(_run_in_context, _app, get_domain_age_days, domain)
+    if parsed.scheme == "https":
+        futures["cert"] = executor.submit(_run_in_context, _app, inspect_certificate, domain)
 
     if not is_ip_address:
         # MX/NS/TXT are conventionally apex-zone records; checking them
         # against a subdomain (e.g. www.example.com) produces false
         # positives since subdomains routinely have none of their own.
         dns_domain = registered_domain if registered_domain else domain.split(":")[0]
-        for dns_message, dns_points in check_dns(dns_domain):
+        # ASN/hosting is a property of the actual serving host, not
+        # necessarily the apex - check against the literal requested domain.
+        host_domain = domain.split(":")[0]
+
+        futures["dns"] = executor.submit(_run_in_context, _app, check_dns, dns_domain)
+        futures["asn"] = executor.submit(_run_in_context, _app, check_asn, host_domain)
+        futures["dangling_dns"] = executor.submit(_run_in_context, _app, check_dangling_dns, host_domain)
+        futures["historical_dns"] = executor.submit(_run_in_context, _app, check_historical_dns, host_domain)
+        futures["ioc"] = executor.submit(_run_in_context, _app, check_ioc_correlation, host_domain)
+        futures["query_params"] = executor.submit(_run_in_context, _app, analyze_query_params, url_original, host_domain)
+        futures["redirect_chain"] = executor.submit(_run_in_context, _app, check_redirect_chain, url, host_domain)
+        futures["playwright"] = executor.submit(_run_in_context, _app, _run_playwright_checks, url, host_domain)
+
+    # Collect results in the same order they used to run sequentially, so
+    # flag ordering in the output stays stable. Each .result() call just
+    # waits on a future that likely already finished, since everything
+    # above started running concurrently.
+    for ti_message, ti_points in futures["threat_intel"].result():
+        flags.append((ti_message, ti_points))
+        score += ti_points
+
+    if not is_ip_address:
+        for dns_message, dns_points in futures["dns"].result():
             flags.append((dns_message, dns_points))
             score += dns_points
 
-        # ASN/hosting is a property of the actual serving host, not
-        # necessarily the apex — check against the literal requested domain.
-        host_domain = domain.split(":")[0]
-        for asn_message, asn_points in check_asn(host_domain):
+        for asn_message, asn_points in futures["asn"].result():
             flags.append((asn_message, asn_points))
             score += asn_points
+        for dd_message, dd_points in futures["dangling_dns"].result():
+            flags.append((dd_message, dd_points))
+            score += dd_points
+        for hd_message, hd_points in futures["historical_dns"].result():
+            flags.append((hd_message, hd_points))
+            score += hd_points
+        for ioc_message, ioc_points in futures["ioc"].result():
+            flags.append((ioc_message, ioc_points))
+            score += ioc_points
 
-        for qp_message, qp_points in analyze_query_params(url_original, host_domain):
+        for qp_message, qp_points in futures["query_params"].result():
             flags.append((qp_message, qp_points))
             score += qp_points
 
-        _pw, _browser, _page = open_scan_session(url)
-        try:
-            for fv_message, fv_points in check_favicon(_page, url, host_domain):
-                flags.append((fv_message, fv_points))
-                score += fv_points
+        for fv_message, fv_points in futures["playwright"].result():
+            flags.append((fv_message, fv_points))
+            score += fv_points
 
-            for cf_message, cf_points in check_credential_forms(_page, url, host_domain):
-                flags.append((cf_message, cf_points))
-                score += cf_points
-
-            for ps_message, ps_points in check_page_source(_page, url, host_domain):
-                flags.append((ps_message, ps_points))
-                score += ps_points
-
-            for fc_message, fc_points in check_fake_captcha(_page, url, host_domain):
-                flags.append((fc_message, fc_points))
-                score += fc_points
-        finally:
-            close_scan_session(_pw, _browser)
-
-        for rc_message, rc_points in check_redirect_chain(url, host_domain):
+        for rc_message, rc_points in futures["redirect_chain"].result():
             flags.append((rc_message, rc_points))
             score += rc_points
 
-    domain_age = get_domain_age_days(domain)
+    domain_age = futures["domain_age"].result()
     if domain_age is not None:
         if domain_age < 30:
             flags.append((f"Domain registered very recently ({domain_age} days ago)", 20))
@@ -209,10 +259,12 @@ def analyze_url(raw_url):
             score += 10
 
     if parsed.scheme == "https":
-        cert_info = inspect_certificate(domain)
+        cert_info = futures["cert"].result()
         if cert_info["valid"] and cert_info["is_free_ca"] and cert_info["cert_age_days"] is not None and cert_info["cert_age_days"] < 14:
             flags.append((f"Uses a freshly issued free SSL certificate ({cert_info['issuer']}, {cert_info['cert_age_days']} days old)", 12))
             score += 12
+
+    executor.shutdown(wait=False)
 
     heuristic_score = min(score, 100)
 

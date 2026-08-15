@@ -1,0 +1,98 @@
+"""
+detectors/attack_chain.py
+Groups a scan's raw, sequentially-ordered flags into named analysis
+stages for the attack-chain visualization. Unlike explain.py's
+signal_breakdown (which re-sorts by point value), this preserves the
+original order flags were generated in, so the chain reads as a
+story: what was checked, in what order, and how the score built up.
+
+Categorization is keyword-based against flag message text, since flags
+are plain (message, points) tuples with no stage metadata. Anything
+that doesn't match a known pattern falls into "Other Signals" rather
+than being silently dropped - if that bucket ever fills up, it's a
+signal this keyword list needs updating to match actual message
+wording from url_analyzer.py's helper checks.
+"""
+
+_STAGE_DEFINITIONS = [
+    ("URL Structure", [
+        "encoded characters", "raw ip address", "https", "unusually long url",
+        "@\" symbol", "subdomains", "hyphens in domain", "shortening service",
+        "high-risk tld", "suspicious keyword", "redirect pattern in url path",
+        "non-standard port",
+    ]),
+    ("Impersonation", [
+        "typosquat", "homograph", "brand impersonation", "punycode",
+        "look-alike", "confusable",
+    ]),
+    ("Network & Infrastructure", [
+        "dns", "asn", "threat intel", "ioc", "shares an ip address",
+        "shares", "redirect chain", "hosting", "nameserver", "mx record",
+        "query param", "dangling", "historical", "nxdomain", "does not resolve",
+        "resolve an ip", "no a record",
+    ]),
+    ("Live Page Behavior", [
+        "playwright", "rendered page", "live page", "javascript", "form field",
+        "password field", "login form", "iframe",
+    ]),
+    ("Domain Trust", [
+        "domain registered", "ssl certificate", "free ssl", "cert",
+    ]),
+    ("ML Verdict", [
+        "model confidence", "phishing probability", "scam probability",
+    ]),
+    ("Adjustments", [
+        "trusted allowlist", "domain tally", "previously scanned",
+        "feedback",
+    ]),
+]
+
+_FALLBACK_STAGE = "Other Signals"
+
+
+def _categorize(reason: str) -> str:
+    reason_lower = reason.lower()
+    for stage_name, keywords in _STAGE_DEFINITIONS:
+        if any(kw in reason_lower for kw in keywords):
+            return stage_name
+    return _FALLBACK_STAGE
+
+
+def build_attack_chain(flags):
+    """
+    Takes the raw (reason, points) flags list in original scan order
+    and returns an ordered list of stage dicts:
+        {
+            "stage": "URL Structure",
+            "signals": [{"reason": ..., "points": ...}, ...],
+            "stage_points": 23,
+            "running_total": 23,
+        }
+    Only stages that actually fired at least one signal are included,
+    in first-occurrence order (so the chain reflects what actually
+    happened during this specific scan, not a fixed template).
+    """
+    stage_order = []
+    stage_map = {}
+
+    for reason, points in flags:
+        stage_name = _categorize(reason)
+        if stage_name not in stage_map:
+            stage_map[stage_name] = []
+            stage_order.append(stage_name)
+        stage_map[stage_name].append({"reason": reason, "points": points})
+
+    chain = []
+    running_total = 0
+    for stage_name in stage_order:
+        signals = stage_map[stage_name]
+        stage_points = sum(s["points"] for s in signals)
+        running_total += stage_points
+        chain.append({
+            "stage": stage_name,
+            "signals": signals,
+            "stage_points": stage_points,
+            "running_total": running_total,
+        })
+
+    return chain

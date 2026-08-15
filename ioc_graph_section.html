@@ -1,0 +1,79 @@
+
+    <div class="flags-section" id="ioc-graph-section">
+        <h2>Infrastructure Correlation</h2>
+        {% if graph_data and graph_data.nodes and graph_data.nodes|length > 1 %}
+        <p class="page-subtitle" style="margin-bottom:16px;">Domains, IPs, and networks this scan shares infrastructure with, based on PhishIQ's own scan history.</p>
+        <svg id="ioc-graph-svg" viewBox="0 0 700 500" style="width:100%; max-width:700px; display:block; margin:0 auto; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:8px;"></svg>
+        <script id="ioc-graph-data" type="application/json">{{ graph_data | tojson }}</script>
+        <script>
+        (function () {
+            const data = JSON.parse(document.getElementById('ioc-graph-data').textContent);
+            const svg = document.getElementById('ioc-graph-svg');
+            const cx = 350, cy = 250, radius = 170;
+            const nodeColors = {
+                center: '#00d9a3',
+                domain: '#8a94a8',
+                dangerous_domain: '#ff4757',
+                ip: '#00d9a3',
+                asn: '#ffb020'
+            };
+
+            const centerNode = data.nodes.find(n => n.kind === 'center');
+            const otherNodes = data.nodes.filter(n => n.kind !== 'center');
+            const positions = {};
+            positions[centerNode.id] = { x: cx, y: cy };
+
+            otherNodes.forEach((n, i) => {
+                const angle = (2 * Math.PI * i) / Math.max(otherNodes.length, 1);
+                positions[n.id] = {
+                    x: cx + radius * Math.cos(angle),
+                    y: cy + radius * Math.sin(angle)
+                };
+            });
+
+            const ns = 'http://www.w3.org/2000/svg';
+            data.edges.forEach(edge => {
+                const a = positions[edge.source];
+                const b = positions[edge.target];
+                if (!a || !b) return;
+                const line = document.createElementNS(ns, 'line');
+                line.setAttribute('x1', a.x);
+                line.setAttribute('y1', a.y);
+                line.setAttribute('x2', b.x);
+                line.setAttribute('y2', b.y);
+                line.setAttribute('stroke', '#2a3448');
+                line.setAttribute('stroke-width', '1.5');
+                svg.appendChild(line);
+            });
+
+            data.nodes.forEach(n => {
+                const pos = positions[n.id];
+                if (!pos) return;
+                const isCenter = n.kind === 'center';
+                const r = isCenter ? 26 : (n.kind === 'ip' || n.kind === 'asn' ? 18 : 14);
+
+                const circle = document.createElementNS(ns, 'circle');
+                circle.setAttribute('cx', pos.x);
+                circle.setAttribute('cy', pos.y);
+                circle.setAttribute('r', r);
+                circle.setAttribute('fill', nodeColors[n.kind] || '#8a94a8');
+                circle.setAttribute('fill-opacity', isCenter ? '1' : '0.85');
+                circle.setAttribute('stroke', '#1a2233');
+                circle.setAttribute('stroke-width', '2');
+                svg.appendChild(circle);
+
+                const label = document.createElementNS(ns, 'text');
+                label.setAttribute('x', pos.x);
+                label.setAttribute('y', pos.y + r + 14);
+                label.setAttribute('text-anchor', 'middle');
+                label.setAttribute('fill', '#e8ecf4');
+                label.setAttribute('font-size', '11');
+                label.textContent = n.label.length > 22 ? n.label.slice(0, 20) + '…' : n.label;
+                svg.appendChild(label);
+            });
+        })();
+        </script>
+        {% else %}
+        <p class="no-signals">No shared infrastructure found with previously-scanned domains.</p>
+        {% endif %}
+    </div>

@@ -1,4 +1,4 @@
-﻿from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
 db = SQLAlchemy()
@@ -54,3 +54,43 @@ class Feedback(db.Model):
     feedback_type = db.Column(db.String(20), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     scan = db.relationship("ScanHistory", backref=db.backref("feedback_entries", lazy=True, cascade="all, delete-orphan"))
+
+
+class DnsSnapshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    domain = db.Column(db.String(255), nullable=False, index=True)
+    a_records = db.Column(db.Text)   # JSON-serialized list
+    ns_records = db.Column(db.Text)  # JSON-serialized list
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class IocRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    domain = db.Column(db.String(255), nullable=False, index=True)
+    ip = db.Column(db.String(45), index=True)
+    asn = db.Column(db.String(20), index=True)
+    asn_description = db.Column(db.String(255))
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+class AsyncScanJob(db.Model):
+    id = db.Column(db.String(36), primary_key=True)  # UUID string
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    url = db.Column(db.Text, nullable=False)
+    batch_id = db.Column(db.String(36), index=True)  # groups jobs submitted together via the batch API
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending|running|complete|failed
+    result = db.Column(db.Text)  # JSON-serialized scan result, set on completion
+    error = db.Column(db.Text)   # error message, set on failure
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+
+class WebhookSubscription(db.Model):
+    id = db.Column(db.String(36), primary_key=True)  # UUID string
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    url = db.Column(db.Text, nullable=False)
+    secret = db.Column(db.String(64), nullable=False)  # used to HMAC-sign outgoing payloads
+    event_type = db.Column(db.String(20), nullable=False, default="all")  # job.complete | batch.complete | all
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_triggered_at = db.Column(db.DateTime)
+    last_status_code = db.Column(db.Integer)
+    user = db.relationship("User", backref=db.backref("webhooks", lazy=True, cascade="all, delete-orphan"))
+

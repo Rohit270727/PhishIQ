@@ -25,23 +25,9 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://*/*",
-    "http://127.0.0.1:5050/*",
-    "https://*/*"
+    "http://127.0.0.1:5050/*"
   ],
   "background": {
     "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }

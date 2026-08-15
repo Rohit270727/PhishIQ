@@ -11,18 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentTabUrl || !currentTabUrl.startsWith("http")) {
       urlBox.textContent = "This page cannot be scanned.";
       document.getElementById("scanBtn").disabled = true;
-      return;
+    } else {
+      urlBox.textContent = currentTabUrl;
     }
-
-    urlBox.textContent = currentTabUrl;
-
-    // Check background.js for an already-cached result for this tab
-    // (from auto-scan on page load) before triggering a fresh scan.
-    chrome.runtime.sendMessage({ type: "GET_CACHED_RESULT" }, (cached) => {
-      if (cached && cached.url === currentTabUrl && cached.result) {
-        renderResult(cached.result);
-      }
-    });
   });
 
   document.getElementById("scanBtn").addEventListener("click", scanCurrentPage);
