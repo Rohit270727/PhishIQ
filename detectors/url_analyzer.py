@@ -14,6 +14,7 @@ from detectors.asn_analyzer import check_asn
 from detectors.query_param_analyzer import analyze_query_params
 from detectors.favicon_analyzer import check_favicon
 from detectors.credential_form_analyzer import check_credential_forms
+from detectors.page_source_analyzer import check_page_source
 
 SUSPICIOUS_TLDS = ["tk", "ml", "ga", "cf", "gq", "xyz", "top", "work", "click", "link", "club", "loan", "win", "download"]
 SHORTENERS = ["bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly"]
@@ -178,6 +179,10 @@ def analyze_url(raw_url):
         for cf_message, cf_points in check_credential_forms(url, host_domain):
             flags.append((cf_message, cf_points))
             score += cf_points
+
+        for ps_message, ps_points in check_page_source(url, host_domain):
+            flags.append((ps_message, ps_points))
+            score += ps_points
 
     domain_age = get_domain_age_days(domain)
     if domain_age is not None:
