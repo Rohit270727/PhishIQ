@@ -1,0 +1,17 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="auth-card" style="max-width:420px;margin:40px auto;">
+  <h2>Enable Two-Factor Authentication</h2>
+  <p>Scan this QR code with Google Authenticator, Authy, or any TOTP app.</p>
+  <img src="data:image/png;base64,{{ qr_b64 }}" alt="2FA QR Code" style="display:block;margin:20px auto;max-width:220px;">
+  <p style="font-size:13px;color:#888;">Can't scan? Enter this code manually: <code>{{ secret }}</code></p>
+  <form method="POST" style="margin-top:20px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="code">Enter the 6-digit code from your app</label>
+    <input type="text" name="code" id="code" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" style="width:100%;padding:8px;margin:8px 0;">
+    <button type="submit" class="btn btn-primary" style="width:100%;">Verify & Enable</button>
+  </form>
+  <a href="{{ url_for('dashboard') }}" style="display:block;margin-top:12px;text-align:center;">Cancel</a>
+</div>
+{% endblock %}
+

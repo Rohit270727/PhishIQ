@@ -15,3 +15,6 @@ class Config:
     SESSION_COOKIE_SECURE = False
 
 
+    VIRUSTOTAL_API_KEY = os.environ.get("VIRUSTOTAL_API_KEY")
+    SAFE_BROWSING_API_KEY = os.environ.get("SAFE_BROWSING_API_KEY")
+    PHISHTANK_API_KEY = os.environ.get("PHISHTANK_API_KEY")

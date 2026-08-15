@@ -46,3 +46,49 @@ def extract_text_from_file(filepath, ext):
 
     raise ValueError(f"Unsupported file type: {ext}")
 
+
+
+def extract_sender_domain(filepath, ext):
+    """Best-effort extraction of the sender's domain from an uploaded file.
+    Only .eml carries real header data; returns None for .txt/.pdf."""
+    if ext.lower() != "eml":
+        return None
+
+    with open(filepath, "rb") as f:
+        raw = f.read()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    from_header = msg.get("from", "")
+    if not from_header:
+        return None
+
+    import re
+    match = re.search(r'@([A-Za-z0-9.-]+\.[A-Za-z]{2,})', str(from_header))
+    if match:
+        return match.group(1).lower()
+    return None
+
+
+def extract_html_body(filepath, ext):
+    """Extract the raw HTML body (if present) from an .eml file, preserving
+    tags. Returns None for non-.eml files or messages with no HTML part —
+    callers must handle None, not assume a string."""
+    if ext.lower() != "eml":
+        return None
+
+    with open(filepath, "rb") as f:
+        raw = f.read()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    html_part = msg.get_body(preferencelist=("html",))
+    if html_part is None:
+        return None
+
+    try:
+        return html_part.get_content()
+    except Exception:
+        return None

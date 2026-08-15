@@ -33,6 +33,11 @@ test_cases = [
     ("http://hsbc-secure-login.loan/banking", "phishing"),
     ("http://wellsfargo.com-alert.ga/verify", "phishing"),
     ("http://update-your-icloud-account.click/", "phishing"),
+
+    # Homograph / punycode detection cases
+    ("http://xn--pypal-4ve.com/login", "phishing"),        # punycode decodes to a "paypal" look-alike
+    ("http://\u0430pple.com/account", "phishing"),          # raw Cyrillic confusable for apple.com
+    ("https://xn--caf-dma.example.com/menu", "legit"),      # real IDN (cafe with accent), not a brand match
 ]
 
 correct = 0

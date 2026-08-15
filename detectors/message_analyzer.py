@@ -1,5 +1,7 @@
 ﻿import re
 from detectors.ml_predictor import ml_message_probability
+from detectors.email_auth import check_email_auth
+from detectors.header_consistency import check_header_consistency
 
 URGENCY_WORDS = ["urgent", "immediately", "act now", "expire", "expiring", "suspended",
                  "verify now", "limited time", "act fast", "last chance", "final notice"]
@@ -10,7 +12,7 @@ GENERIC_GREETINGS = ["dear customer", "dear user", "dear valued customer", "dear
 
 URL_PATTERN = re.compile(r"(https?://\S+|www\.\S+|bit\.ly/\S+|tinyurl\.com/\S+)", re.IGNORECASE)
 
-def analyze_message(text):
+def analyze_message(text, sender_domain=None, eml_filepath=None):
     flags = []
     score = 0
     t = text.lower()
@@ -78,7 +80,29 @@ def analyze_message(text):
     elif final_score >= 31:
         verdict = "Suspicious"
 
+    email_auth_result = None
+    if sender_domain:
+        email_auth_result = check_email_auth(sender_domain)
+        auth_pts = email_auth_result["email_auth_risk_score"]
+        if auth_pts > 0:
+            note = email_auth_result["all_notes"][0] if email_auth_result["all_notes"] else "Sender domain authentication issue"
+            flags.append((f"Sender domain email authentication: {note}", auth_pts))
+            final_score = min(final_score + auth_pts, 100)
+            if final_score >= 61:
+                verdict = "Dangerous"
+            elif final_score >= 31:
+                verdict = "Suspicious"
+
+    if eml_filepath:
+        for hc_message, hc_points in check_header_consistency(eml_filepath):
+            flags.append((hc_message, hc_points))
+            final_score = min(final_score + hc_points, 100)
+            if final_score >= 61:
+                verdict = "Dangerous"
+            elif final_score >= 31:
+                verdict = "Suspicious"
+
     if not flags:
         flags.append(("No known phishing/scam indicators detected", 0))
 
-    return {"score": final_score, "verdict": verdict, "flags": flags}
+    return {"score": final_score, "verdict": verdict, "flags": flags, "email_auth": email_auth_result}

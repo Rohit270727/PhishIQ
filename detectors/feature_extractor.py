@@ -55,6 +55,16 @@ def extract_url_features(raw_url):
             "has_https": 1 if parsed.scheme == "https" else 0,
             "has_port": 1 if port and port not in (80, 443) else 0,
             "suspicious_tld": 1 if domain.split(".")[-1].split(":")[0] in SUSPICIOUS_TLDS else 0,
+            # NOTE: keyword_count and double_slash_in_path are computed on raw
+            # (non-decoded) strings, matching how url_model.pkl was trained.
+            # This means percent-encoded or HTML-entity-encoded obfuscation
+            # (e.g. "%6c%6f%67%69%6e" for "login") will NOT increment
+            # keyword_count or set double_slash_in_path here, even though
+            # url_analyzer.py's rule-based checks (_normalize_for_analysis)
+            # now catch this pattern independently. Do not "fix" this by
+            # decoding here without retraining/re-evaluating url_model.pkl -
+            # doing so would silently change feature semantics the model
+            # was calibrated against. See patch discussion 2026-08-14.
             "keyword_count": sum(1 for k in SUSPICIOUS_KEYWORDS if k in full),
             "double_slash_in_path": 1 if "//" in path else 0,
             "digit_letter_ratio": round(digit_letter_ratio, 4),

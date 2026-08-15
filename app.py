@@ -10,6 +10,9 @@ import io
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
+import pyotp
+import qrcode
+import base64
 
 from config import Config
 from models import db, User, ScanHistory, ApiKey, PasswordResetToken, Feedback
@@ -95,6 +98,9 @@ def login():
         password = request.form.get("password", "")
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
+            if user.totp_enabled:
+                session["pending_2fa_user_id"] = user.id
+                return redirect(url_for("login_verify_2fa"))
             session.permanent = True
             session["user_id"] = user.id
             session["username"] = user.username
@@ -104,6 +110,52 @@ def login():
         return redirect(url_for("login"))
 
     return render_template("login.html")
+
+
+@app.route("/login/verify-2fa", methods=["GET", "POST"])
+def login_verify_2fa():
+    pending_id = session.get("pending_2fa_user_id")
+    if not pending_id:
+        return redirect(url_for("login"))
+    user = User.query.get(pending_id)
+    if not user:
+        session.pop("pending_2fa_user_id", None)
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip().replace(" ", "")
+        totp = pyotp.TOTP(user.totp_secret)
+
+        if totp.verify(code, valid_window=1):
+            session.pop("pending_2fa_user_id", None)
+            session.permanent = True
+            session["user_id"] = user.id
+            session["username"] = user.username
+            flash(f"Welcome back, {user.username}!", "success")
+            return redirect(url_for("dashboard"))
+
+        backup_codes = json.loads(user.backup_codes) if user.backup_codes else []
+        matched_index = None
+        for i, bc_hash in enumerate(backup_codes):
+            if check_password_hash(bc_hash, code):
+                matched_index = i
+                break
+
+        if matched_index is not None:
+            backup_codes.pop(matched_index)
+            user.backup_codes = json.dumps(backup_codes)
+            db.session.commit()
+            session.pop("pending_2fa_user_id", None)
+            session.permanent = True
+            session["user_id"] = user.id
+            session["username"] = user.username
+            flash("Logged in with a backup code. Consider regenerating your codes in settings.", "success")
+            return redirect(url_for("dashboard"))
+
+        flash("Invalid authentication code.", "error")
+        return redirect(url_for("login_verify_2fa"))
+
+    return render_template("login_verify_2fa.html")
 
 
 @app.route("/logout")
@@ -184,11 +236,22 @@ def scan_message():
             if extracted and extracted.strip():
                 text = extracted.strip()
 
+            sender_domain = None
+            eml_filepath = None
+            if ext == "eml":
+                from detectors.file_extractor import extract_sender_domain
+                sender_domain = extract_sender_domain(filepath, ext)
+                eml_filepath = filepath
+
         if not text:
             flash("Please enter a message or upload a file.", "error")
             return redirect(url_for("scan_message"))
 
-        result = analyze_message(text)
+        result = analyze_message(
+            text,
+            sender_domain=locals().get("sender_domain"),
+            eml_filepath=locals().get("eml_filepath")
+        )
         scan = ScanHistory(
             user_id=session["user_id"],
             scan_type="message",
@@ -283,7 +346,22 @@ def result(scan_id):
     flags = json.loads(scan.flags)
     existing_feedback = Feedback.query.filter_by(scan_id=scan.id, user_id=session["user_id"]).first()
     feedback_type = existing_feedback.feedback_type if existing_feedback else None
-    return render_template("result.html", scan=scan, flags=flags, feedback_type=feedback_type)
+
+    from detectors.explain import build_signal_breakdown, get_primary_reason, get_confidence
+    signal_breakdown, notes = build_signal_breakdown(flags)
+    primary_reason = get_primary_reason(flags)
+    confidence = get_confidence(flags)
+
+    return render_template(
+        "result.html",
+        scan=scan,
+        flags=flags,
+        feedback_type=feedback_type,
+        signal_breakdown=signal_breakdown,
+        notes=notes,
+        primary_reason=primary_reason,
+        confidence=confidence,
+    )
 
 
 
@@ -607,6 +685,80 @@ def send_digest():
     except Exception as e:
         flash(f"Failed to send digest: {e}", "error")
 
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/settings/2fa/setup", methods=["GET", "POST"])
+@login_required
+def setup_2fa():
+    user = User.query.get(session["user_id"])
+
+    if user.totp_enabled:
+        flash("Two-factor authentication is already enabled.", "success")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip().replace(" ", "")
+        if not user.totp_secret:
+            flash("2FA setup session expired. Start again.", "error")
+            return redirect(url_for("setup_2fa"))
+
+        totp = pyotp.TOTP(user.totp_secret)
+        if totp.verify(code, valid_window=1):
+            raw_backup_codes = [secrets.token_hex(4) for _ in range(8)]
+            hashed_backup_codes = [generate_password_hash(c) for c in raw_backup_codes]
+            user.totp_enabled = True
+            user.backup_codes = json.dumps(hashed_backup_codes)
+            db.session.commit()
+
+            try:
+                from detectors.email_utils import send_email
+                html_body = (
+                    "<div style=\"font-family: Arial, sans-serif;\">"
+                    "<h2>Two-Factor Authentication Enabled</h2>"
+                    "<p>Hi " + user.username + ", 2FA has just been enabled on your PhishIQ account.</p>"
+                    "<p>If this was not you, change your password immediately.</p>"
+                    "</div>"
+                )
+                send_email(user.email, "PhishIQ: 2FA Enabled", html_body)
+            except Exception:
+                pass
+
+            flash("Two-factor authentication enabled. Save your backup codes now.", "success")
+            return render_template("backup_codes.html", codes=raw_backup_codes)
+
+        flash("Invalid code. Try again.", "error")
+        return redirect(url_for("setup_2fa"))
+
+    secret = pyotp.random_base32()
+    user.totp_secret = secret
+    db.session.commit()
+
+    provisioning_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=user.email, issuer_name="PhishIQ"
+    )
+
+    qr_img = qrcode.make(provisioning_uri)
+    buf = io.BytesIO()
+    qr_img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return render_template("setup_2fa.html", qr_b64=qr_b64, secret=secret)
+
+
+@app.route("/settings/2fa/disable", methods=["POST"])
+@login_required
+def disable_2fa():
+    user = User.query.get(session["user_id"])
+    password = request.form.get("password", "")
+    if not check_password_hash(user.password_hash, password):
+        flash("Incorrect password.", "error")
+        return redirect(url_for("dashboard"))
+    user.totp_enabled = False
+    user.totp_secret = None
+    user.backup_codes = None
+    db.session.commit()
+    flash("Two-factor authentication disabled.", "success")
     return redirect(url_for("dashboard"))
 
 

@@ -10,6 +10,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
+    totp_secret = db.Column(db.String(32))
+    totp_enabled = db.Column(db.Boolean, default=False)
+    backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
     scans = db.relationship("ScanHistory", backref="user", lazy=True, cascade="all, delete-orphan")
 
 class ApiKey(db.Model):
@@ -51,6 +54,3 @@ class Feedback(db.Model):
     feedback_type = db.Column(db.String(20), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     scan = db.relationship("ScanHistory", backref=db.backref("feedback_entries", lazy=True, cascade="all, delete-orphan"))
-
-
-

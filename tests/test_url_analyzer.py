@@ -68,3 +68,42 @@ def test_verdict_matches_score_thresholds():
         assert result["verdict"] == "Suspicious"
     else:
         assert result["verdict"] == "Safe"
+
+def test_percent_encoded_keyword_flagged():
+    result = analyze_url("http://example.com/%6c%6f%67%69%6e")
+    reasons = [f[0] for f in result["flags"]]
+    assert any("encoded characters" in r for r in reasons)
+    assert any("keyword" in r.lower() or "suspicious" in r.lower() for r in reasons)
+
+def test_html_entity_keyword_flagged():
+    result = analyze_url("http://example.com/&#108;ogin")
+    reasons = [f[0] for f in result["flags"]]
+    assert any("encoded characters" in r for r in reasons)
+    assert any("keyword" in r.lower() or "suspicious" in r.lower() for r in reasons)
+
+def test_double_percent_encoded_keyword_flagged():
+    result = analyze_url("http://example.com/%256c%256f%2567%2569%256e")
+    reasons = [f[0] for f in result["flags"]]
+    assert any("encoded characters" in r for r in reasons)
+    assert any("keyword" in r.lower() or "suspicious" in r.lower() for r in reasons)
+
+def test_benign_double_slash_in_query_still_flagged():
+    result = analyze_url("http://example.com/search/foo//bar")
+    reasons = [f[0] for f in result["flags"]]
+    assert any("redirect" in r.lower() for r in reasons)
+
+def test_malformed_percent_sequence_does_not_crash():
+    result = analyze_url("http://example.com/foo%zzbar%")
+    assert isinstance(result["score"], int)
+    assert isinstance(result["flags"], list)
+
+def test_clean_url_no_encoding_flags():
+    result = analyze_url("https://github.com/anthropic/docs")
+    reasons = [f[0] for f in result["flags"]]
+    assert not any("encoded characters" in r for r in reasons)
+
+def test_quadruple_encoded_input_terminates_cleanly():
+    result = analyze_url("http://example.com/%25%32%35%25%33%32%25%33%35%25%32%35%25%33%33%25%33%36%25%32%35%25%33%36%25%33%33%25%32%35%25%33%32%25%33%35%25%32%35%25%33%33%25%33%36%25%32%35%25%33%36%25%33%36%25%32%35%25%33%32%25%33%35%25%32%35%25%33%33%25%33%36%25%32%35%25%33%33%25%33%37%25%32%35%25%33%32%25%33%35%25%32%35%25%33%33%25%33%36%25%32%35%25%33%33%25%33%39%25%32%35%25%33%32%25%33%35%25%32%35%25%33%33%25%33%36%25%32%35%25%33%36%25%33%35")
+    assert isinstance(result["score"], int)
+    assert isinstance(result["flags"], list)
+    assert 0 <= result["score"] <= 100

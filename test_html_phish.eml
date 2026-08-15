@@ -1,0 +1,8 @@
+﻿From: "PayPal Security" <security@paypal-verify-account.tk>
+Subject: Your account needs verification
+Content-Type: text/html
+
+<html><body>
+<p>Dear Customer, your account requires immediate verification.</p>
+<p>Please <a href="http://paypal-verify-account.tk/login">www.paypal.com</a> to continue.</p>
+</body></html>

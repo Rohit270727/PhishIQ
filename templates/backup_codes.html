@@ -1,0 +1,13 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="auth-card" style="max-width:420px;margin:40px auto;">
+  <h2>Save Your Backup Codes</h2>
+  <p style="color:#c0392b;font-weight:bold;">Store these somewhere safe. Each code works once if you lose access to your authenticator app.</p>
+  <ul style="font-family:monospace;font-size:16px;line-height:2;list-style:none;background:#f5f5f5;border-radius:8px;padding:16px;">
+    {% for code in codes %}
+    <li>{{ code }}</li>
+    {% endfor %}
+  </ul>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-primary" style="display:block;text-align:center;margin-top:16px;">I've saved these, continue</a>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="auth-card" style="max-width:400px;margin:60px auto;">
+  <h2>Two-Factor Verification</h2>
+  <p>Enter the 6-digit code from your authenticator app, or a backup code.</p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="code" maxlength="8" required autofocus autocomplete="one-time-code" style="width:100%;padding:8px;margin:8px 0;" placeholder="123456">
+    <button type="submit" class="btn btn-primary" style="width:100%;">Verify</button>
+  </form>
+  <a href="{{ url_for('login') }}" style="display:block;margin-top:12px;text-align:center;">Back to login</a>
+</div>
+{% endblock %}
+
